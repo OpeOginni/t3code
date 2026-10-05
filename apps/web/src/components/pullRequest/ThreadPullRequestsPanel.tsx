@@ -75,11 +75,13 @@ function LinkRow({
   line,
   threadRef,
   onUnlink,
+  canUnlinkStack,
   onSetWatching,
 }: {
   line: PullRequestListLine;
   threadRef: ScopedThreadRef;
-  onUnlink: (links: ReadonlyArray<ThreadPullRequestLink>) => void;
+  onUnlink: (link: ThreadPullRequestLink, wholeStack?: boolean) => void;
+  canUnlinkStack: boolean;
   /** Null when the environment cannot watch pull requests. */
   onSetWatching: ((link: ThreadPullRequestLink, watching: boolean) => void) | null;
 }) {
@@ -249,12 +251,12 @@ function LinkRow({
                 {watching ? "Stop watching" : "Watch for changes"}
               </MenuItem>
             ) : null}
-            <MenuItem onClick={() => onUnlink([link])}>
+            <MenuItem onClick={() => onUnlink(link)}>
               <PullRequestGlyph.unlink className="size-3.5" />
               {link.source === "stack" ? "Dismiss from thread" : "Unlink from thread"}
             </MenuItem>
-            {stack ? (
-              <MenuItem onClick={() => onUnlink(stack.layers)}>
+            {stack && canUnlinkStack ? (
+              <MenuItem onClick={() => onUnlink(link, true)}>
                 <PullRequestGlyph.unlink className="size-3.5" />
                 Unlink stack from thread
               </MenuItem>
@@ -287,22 +289,23 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   const supportsWatch =
     useServerConfigs().get(threadRef.environmentId)?.environment.capabilities
       .threadPullRequestWatch === true;
+  const supportsStackUnlink =
+    useServerConfigs().get(threadRef.environmentId)?.environment.capabilities
+      .threadPullRequestStackUnlink === true;
   const links = useMemo(() => visibleThreadPullRequests(thread?.pullRequests ?? []), [thread]);
   const lines = useMemo(() => pullRequestListLines(resolveThreadPullRequestChains(links)), [links]);
   const handleUnlink = useCallback(
-    async (layers: ReadonlyArray<ThreadPullRequestLink>) => {
-      for (const link of layers) {
-        const result = await unlink({
-          environmentId: threadRef.environmentId,
-          input: {
-            threadId: threadRef.threadId,
-            host: link.host,
-            repository: link.repository,
-            number: link.number,
-          },
-        });
-        if (result._tag === "Failure") return;
-      }
+    (link: ThreadPullRequestLink, wholeStack = false) => {
+      void unlink({
+        environmentId: threadRef.environmentId,
+        input: {
+          threadId: threadRef.threadId,
+          host: link.host,
+          repository: link.repository,
+          number: link.number,
+          ...(wholeStack ? { wholeStack: true } : {}),
+        },
+      });
     },
     [threadRef, unlink],
   );
@@ -361,6 +364,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
               line={line}
               threadRef={threadRef}
               onUnlink={handleUnlink}
+              canUnlinkStack={supportsStackUnlink}
               onSetWatching={supportsWatch ? handleSetWatching : null}
             />
           ))}

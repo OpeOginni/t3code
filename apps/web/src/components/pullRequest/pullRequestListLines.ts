@@ -9,11 +9,7 @@ export interface PullRequestListLine {
   /** Which chain the line belongs to, so callers can tell one stack's lines from another's. */
   readonly chainKey: string;
   /** Set on the bottom layer of a multi-layer stack, so that row can name the whole stack. */
-  readonly stack: {
-    readonly kind: ThreadPullRequestChain["kind"];
-    readonly size: number;
-    readonly layers: ReadonlyArray<ThreadPullRequestLink>;
-  } | null;
+  readonly stack: { readonly kind: ThreadPullRequestChain["kind"]; readonly size: number } | null;
 }
 
 function activityAt(link: ThreadPullRequestLink): number {
@@ -46,7 +42,7 @@ export function pullRequestListLines(
       chainKey,
       stack:
         depth === 0 && chain.layers.length > 1
-          ? { kind: chain.kind, size: chain.layers.length, layers: chain.layers }
+          ? { kind: chain.kind, size: chain.layers.length }
           : null,
     }));
   });
