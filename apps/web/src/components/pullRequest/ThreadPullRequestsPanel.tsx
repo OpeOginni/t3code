@@ -79,7 +79,7 @@ function LinkRow({
 }: {
   line: PullRequestListLine;
   threadRef: ScopedThreadRef;
-  onUnlink: (link: ThreadPullRequestLink) => void;
+  onUnlink: (links: ReadonlyArray<ThreadPullRequestLink>) => void;
   /** Null when the environment cannot watch pull requests. */
   onSetWatching: ((link: ThreadPullRequestLink, watching: boolean) => void) | null;
 }) {
@@ -249,10 +249,16 @@ function LinkRow({
                 {watching ? "Stop watching" : "Watch for changes"}
               </MenuItem>
             ) : null}
-            <MenuItem onClick={() => onUnlink(link)}>
+            <MenuItem onClick={() => onUnlink([link])}>
               <PullRequestGlyph.unlink className="size-3.5" />
               {link.source === "stack" ? "Dismiss from thread" : "Unlink from thread"}
             </MenuItem>
+            {stack ? (
+              <MenuItem onClick={() => onUnlink(stack.layers)}>
+                <PullRequestGlyph.unlink className="size-3.5" />
+                Unlink stack from thread
+              </MenuItem>
+            ) : null}
           </MenuPopup>
         </Menu>
       </span>
@@ -284,16 +290,19 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   const links = useMemo(() => visibleThreadPullRequests(thread?.pullRequests ?? []), [thread]);
   const lines = useMemo(() => pullRequestListLines(resolveThreadPullRequestChains(links)), [links]);
   const handleUnlink = useCallback(
-    (link: ThreadPullRequestLink) => {
-      void unlink({
-        environmentId: threadRef.environmentId,
-        input: {
-          threadId: threadRef.threadId,
-          host: link.host,
-          repository: link.repository,
-          number: link.number,
-        },
-      });
+    async (layers: ReadonlyArray<ThreadPullRequestLink>) => {
+      for (const link of layers) {
+        const result = await unlink({
+          environmentId: threadRef.environmentId,
+          input: {
+            threadId: threadRef.threadId,
+            host: link.host,
+            repository: link.repository,
+            number: link.number,
+          },
+        });
+        if (result._tag === "Failure") return;
+      }
     },
     [threadRef, unlink],
   );

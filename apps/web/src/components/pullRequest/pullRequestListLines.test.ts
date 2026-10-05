@@ -48,6 +48,7 @@ describe("pullRequestListLines", () => {
       [9, 0, null],
       [5, 0, null],
     ]);
+    expect(lines[0]!.stack!.layers.map((layer) => layer.number)).toEqual([1, 2]);
   });
 
   it("marks native stacks on their base layer", () => {
@@ -72,5 +73,39 @@ describe("pullRequestListLines", () => {
       [3, 0, "native"],
       [4, 1, null],
     ]);
+    expect(lines[0]!.stack!.layers.map((layer) => layer.number)).toEqual([3, 4]);
+  });
+
+  it("scopes stack actions to visible members of the same host and repository", () => {
+    const updatedAt = "2026-01-01T10:00:00Z";
+    const bottom = link(1, "a", "main", updatedAt);
+    const top = link(2, "b", "a", updatedAt);
+    const dismissed = { ...link(3, "c", "b", updatedAt), source: "stack-dismissed" as const };
+    const otherRepository = { ...top, repository: "acme/api" };
+    const otherHost = { ...top, host: "github.example.com" };
+    const lines = pullRequestListLines(
+      resolveThreadPullRequestChains([bottom, top, dismissed, otherRepository, otherHost]),
+    );
+
+    const stacks = lines.flatMap((line) => (line.stack ? [line.stack] : []));
+    expect(stacks).toHaveLength(1);
+    expect(stacks[0]!.layers).toEqual([bottom, top]);
+    expect(lines.filter((line) => line.stack === null).map((line) => line.link)).toEqual([
+      top,
+      otherRepository,
+      otherHost,
+    ]);
+  });
+
+  it("does not offer stack actions for unrelated pull requests", () => {
+    const lines = pullRequestListLines(
+      resolveThreadPullRequestChains([
+        link(1, "a", "main", "2026-01-01T10:00:00Z"),
+        link(2, "b", "main", "2026-01-01T11:00:00Z"),
+      ]),
+    );
+
+    expect(lines).toHaveLength(2);
+    expect(lines.every((line) => line.stack === null)).toBe(true);
   });
 });
