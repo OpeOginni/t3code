@@ -2116,7 +2116,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
-  it.effect.each([false, true])("atomically unlinks a stack (native=%s)", (native) =>
+  it.effect.each([false, true])("unlinks linked stack members in one event (native=%s)", (native) =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
       const maintenance = yield* ProjectionMaintenance.ProjectionMaintenanceV2;
@@ -2143,7 +2143,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
             number: 1,
             url: "https://github.com/acme/web/stacks/1",
             base: "main",
-            layers: [1, 2, 3].map((number) => ({
+            layers: [1, 2, 3, 4, 5].map((number) => ({
               number,
               headBranch: `pr-${number}`,
               state: "open" as const,
@@ -2154,9 +2154,11 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         key,
         { ...key, number: 2 },
         { ...key, number: 3 },
+        { ...key, host: "GITHUB.COM", repository: "ACME/WEB", number: 4 },
         { ...key, number: 9 },
         { ...key, repository: "acme/api", number: 2 },
         { ...key, host: "github.example.com", number: 2 },
+        { ...key, repository: "acme/dismissed", number: 3 },
       ]) {
         const id = `${threadId}-${reference.host}-${reference.repository}-${reference.number}`;
         yield* orchestrator.dispatch({
@@ -2172,55 +2174,64 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           commandId: CommandId.make(`sync-${id}`),
           threadId,
           ...reference,
-          stack: reference.number === 9 ? null : stack,
+          stack: reference.number === 1 || reference.number === 2 ? stack : null,
           snapshot: {
             state: "open",
             title: "PR",
             headBranch: `pr-${reference.number}`,
-            baseBranch: reference.number === 2 ? "pr-1" : reference.number === 3 ? "pr-2" : "main",
+            baseBranch: reference.number === 2 ? "pr-1" : reference.number === 4 ? "pr-2" : "main",
             isDraft: false,
             updatedAt: "2026-10-01T00:00:00Z",
             syncedAt: "2026-10-01T00:00:00Z",
           },
         });
+        if (reference.number === 3) continue;
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make(`watch-${id}`),
+          threadId,
+          ...reference,
+          watching: true,
+        });
       }
-      yield* orchestrator.dispatch({
-        type: "thread.pull-request.watch",
-        commandId: CommandId.make(`watch-${threadId}`),
-        threadId,
-        ...key,
-        watching: true,
-      });
       const before = (yield* orchestrator.getThreadShell(threadId))!.pullRequests!;
       const sequence = yield* orchestrator.getThreadEventSequence(threadId);
-      const command = {
+      const unlink = {
         type: "thread.pull-request.unlink" as const,
+        commandId: CommandId.make(`unlink-${threadId}`),
         threadId,
         ...key,
         wholeStack: true,
       };
-      const unlink = { ...command, commandId: CommandId.make(`unlink-${threadId}`) };
       yield* orchestrator.dispatch(unlink);
       const after = (yield* orchestrator.getThreadShell(threadId))!.pullRequests!;
       const untouched = before.filter(
         (link) =>
-          link.number !== 1 &&
-          !(link.host === key.host && link.repository === key.repository && link.number === 2),
+          link.host !== key.host ||
+          link.repository !== key.repository ||
+          ![1, 2, 4].includes(link.number),
       );
-      assert.deepEqual(
-        after.filter((link) => link.source !== "stack-dismissed"),
-        untouched.filter((link) => link.source !== "stack-dismissed"),
-      );
+      assert.equal(after.filter((link) => link.source !== "stack-dismissed").length, 3);
       for (const link of untouched) assert.deepInclude(after, link);
-      assert.equal(after.length, native ? before.length : before.length - 2);
-      assert.isFalse(after.some((link) => link.watch !== undefined));
+      assert.equal(after.length, native ? before.length : before.length - 3);
+      assert.isFalse(
+        after.some((link) => link.source === "stack-dismissed" && link.watch !== undefined),
+      );
       assert.equal(yield* orchestrator.getThreadEventSequence(threadId), sequence + 1);
       yield* orchestrator.dispatch(unlink);
       assert.equal(yield* orchestrator.getThreadEventSequence(threadId), sequence + 1);
       yield* orchestrator.dispatch({
-        ...command,
+        ...unlink,
         number: 9,
         commandId: CommandId.make(`standalone-${threadId}`),
+      });
+      assert.deepEqual((yield* orchestrator.getThreadShell(threadId))!.pullRequests, after);
+      yield* orchestrator.dispatch({
+        ...unlink,
+        repository: "acme/dismissed",
+        number: 3,
+        wholeStack: false,
+        commandId: CommandId.make(`dismissed-${threadId}`),
       });
       assert.deepEqual((yield* orchestrator.getThreadShell(threadId))!.pullRequests, after);
       assert.isTrue((yield* maintenance.rebuild).valid);

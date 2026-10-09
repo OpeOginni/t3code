@@ -3037,14 +3037,21 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               link,
             ];
           } else if (command.type === "thread.pull-request.unlink") {
-            if (!existing) return thread;
+            if (!existing || existing.source === "stack-dismissed") return thread;
             let targets = new Set([existing]);
             if (command.wholeStack) {
               const stack = resolveThreadPullRequestChains(links).find((chain) =>
                 chain.layers.includes(existing),
               );
-              if (!stack || stack.layers.length < 2) return thread;
+              if (!stack) return thread;
               targets = new Set(stack.layers);
+              for (const layer of existing.stack?.layers ?? []) {
+                const member = links.find((link) =>
+                  threadPullRequestKeysEqual(link, { ...key, number: layer.number }),
+                );
+                if (member && member.source !== "stack-dismissed") targets.add(member);
+              }
+              if (targets.size < 2) return thread;
             }
             pullRequests = links.flatMap((link) => {
               if (!targets.has(link)) return [link];
