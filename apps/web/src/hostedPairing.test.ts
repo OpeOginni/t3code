@@ -9,6 +9,18 @@ import {
 } from "./hostedPairing";
 
 describe("hostedPairing", () => {
+  it("does not embed backend URL credentials in the hosted host parameter", () => {
+    vi.stubEnv("VITE_HOSTED_APP_URL", "https://app.t3.codes");
+    const url = new URL(
+      buildHostedPairingUrl({
+        host: "https://user:secret@proxy.test/ws/a%2Fb?token=old-secret#token=old-secret",
+        token: "pairing-token",
+      }),
+    );
+    expect(url.searchParams.get("host")).toBe("https://proxy.test/ws/a%2Fb");
+    expect(url.search).not.toContain("secret");
+    expect(url.hash).toBe("#token=pairing-token");
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
   });

@@ -6,6 +6,7 @@ import {
 } from "@t3tools/shared/hostClassification";
 import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { deriveWsBaseUrl, normalizeHttpBaseUrl } from "../environment/endpoint.ts";
 
 import {
   BearerConnectionProfile,
@@ -261,24 +262,26 @@ export function mergeLearnedRoutes(input: {
       ? credentialConnectionId(active.connectionId)
       : undefined;
 
-  // Usable reported addresses, by origin.
+  const normalized = (url: string) => normalizeHttpBaseUrl(url).replace(/\/+$/, "");
+  // Usable reported addresses, including their mount path.
   const reported = new Map<string, URL>();
   const tailscaleOrigins = new Set<string>();
   for (const endpoint of input.reported) {
     let url: URL;
     try {
       url = new URL(endpoint.httpBaseUrl);
+      if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+      url = new URL(normalizeHttpBaseUrl(url.href));
     } catch {
       continue;
     }
-    if (url.protocol !== "http:" && url.protocol !== "https:") continue;
     if (url.protocol === "http:" && !input.allowInsecure) continue;
     // A loopback address names whichever device opens it, never the server.
     if (isLocalLoopbackHost(url.hostname)) continue;
-    reported.set(url.origin, url);
-    if (endpoint.kind === "tailnet") tailscaleOrigins.add(url.origin);
+    const address = normalized(url.href);
+    reported.set(address, url);
+    if (endpoint.kind === "tailnet") tailscaleOrigins.add(address);
   }
-  const normalized = (url: string) => url.replace(/\/+$/, "");
   const known = new Set(
     saved.flatMap((route) => {
       const url = routeHttpBaseUrl(route);
@@ -300,13 +303,10 @@ export function mergeLearnedRoutes(input: {
   });
   let next: ReadonlyArray<ConnectionRoute> = kept;
   for (const url of reported.values()) {
-    if (known.has(url.origin)) continue;
-    const httpBaseUrl = `${url.origin}/`;
-    const connectionId = learnedConnectionId(
-      entry.target.environmentId,
-      url.origin,
-      sharedCredential,
-    );
+    const address = normalized(url.href);
+    if (known.has(address)) continue;
+    const httpBaseUrl = url.href;
+    const connectionId = learnedConnectionId(entry.target.environmentId, address, sharedCredential);
     next = insertRoute(next, {
       target: new BearerConnectionTarget({
         environmentId: entry.target.environmentId,
@@ -319,10 +319,10 @@ export function mergeLearnedRoutes(input: {
           environmentId: entry.target.environmentId,
           label: entry.target.label,
           httpBaseUrl,
-          wsBaseUrl: `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/`,
+          wsBaseUrl: deriveWsBaseUrl(httpBaseUrl),
           learned: true,
           ...(authorization === undefined ? {} : { authorization }),
-          ...(tailscaleOrigins.has(url.origin) ? { network: "tailscale" as const } : {}),
+          ...(tailscaleOrigins.has(address) ? { network: "tailscale" as const } : {}),
         }),
       ),
     });
@@ -372,18 +372,20 @@ function withNetwork(route: ConnectionRoute, tailscale: boolean): ConnectionRout
  */
 function learnedConnectionId(
   environmentId: string,
-  origin: string,
+  address: string,
   sharedCredential: string | undefined,
 ): string {
+  // Mount paths can contain "@"; escape the credential separator without
+  // conflating a literal character with an already percent-encoded one.
+  const key = address.replace(/[%@]/g, encodeURIComponent);
   return sharedCredential === undefined
-    ? `learned:${environmentId}:${origin}`
-    : `learned:${environmentId}:${origin}@${sharedCredential}`;
+    ? `learned:${environmentId}:${key}`
+    : `learned:${environmentId}:${key}@${sharedCredential}`;
 }
 
 /** The connection id whose stored credential a bearer route uses. */
 export function credentialConnectionId(connectionId: string): string {
-  // The borrowed id follows the first "@"; neither an environment id nor an
-  // origin contains one.
+  // The borrowed id follows the first "@"; the learned address escapes it.
   const at = connectionId.indexOf("@");
   return connectionId.startsWith("learned:") && at !== -1
     ? connectionId.slice(at + 1)

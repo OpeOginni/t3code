@@ -80,6 +80,68 @@ describe("connection routes", () => {
 });
 
 describe("learned routes", () => {
+  it("does not confuse mount characters with a borrowed credential's separator", () => {
+    const sourceId = "bearer:environment-1:https://proxy.test/original@route";
+    const source = direct(sourceId, "https://proxy.test/original@route/");
+    const entry = { ...source, enabled: true };
+    const routes = mergeLearnedRoutes({
+      entry,
+      activeRoute: source,
+      allowInsecure: true,
+      reported: [
+        { httpBaseUrl: "https://proxy.test/nested/@route" },
+        { httpBaseUrl: "https://proxy.test/nested/%40route" },
+      ],
+    });
+    const learned = routes!.filter(
+      (route) =>
+        Option.isSome(route.profile) &&
+        route.profile.value._tag === "BearerConnectionProfile" &&
+        route.profile.value.learned,
+    );
+    expect(new Set(learned.map((route) => connectionRouteId(route.target))).size).toBe(2);
+    for (const route of learned) {
+      expect(credentialConnectionId(connectionRouteId(route.target))).toBe(sourceId);
+    }
+  });
+  it("keeps independently prefixed addresses on one origin as separate learned routes", () => {
+    const routes = mergeLearnedRoutes({
+      entry: relayOnly,
+      activeRoute: RELAY,
+      allowInsecure: true,
+      reported: [
+        { httpBaseUrl: "https://proxy.test/ws/one" },
+        { httpBaseUrl: "https://proxy.test/ws/two/" },
+      ],
+    });
+    expect(
+      routes?.flatMap((route) => (Option.isSome(route.profile) ? [route.profile.value] : [])),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          httpBaseUrl: "https://proxy.test/ws/one/",
+          wsBaseUrl: "wss://proxy.test/ws/one/",
+        }),
+        expect.objectContaining({
+          httpBaseUrl: "https://proxy.test/ws/two/",
+          wsBaseUrl: "wss://proxy.test/ws/two/",
+        }),
+      ]),
+    );
+    expect(routes).toHaveLength(3);
+    expect(new Set(ids(routes)).size).toBe(3);
+    expect(
+      mergeLearnedRoutes({
+        entry: entryWithRoutes(relayOnly, routes!),
+        activeRoute: RELAY,
+        allowInsecure: true,
+        reported: [
+          { httpBaseUrl: "https://proxy.test/ws/one/" },
+          { httpBaseUrl: "https://proxy.test/ws/two" },
+        ],
+      }),
+    ).toBeNull();
+  });
   const relayOnly: ConnectionCatalogEntry = {
     target: RELAY.target,
     profile: RELAY.profile,

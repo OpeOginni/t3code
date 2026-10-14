@@ -1,5 +1,6 @@
 import { PRIMARY_LOCAL_ENVIRONMENT_ID, type DesktopEnvironmentBootstrap } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { environmentEndpointUrl } from "@t3tools/shared/advertisedEndpoint";
 
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 
@@ -296,11 +297,11 @@ export function resolvePrimaryEnvironmentHttpUrl(
     source: primaryTarget.source,
     urlKind: "http-base-url",
   });
-  url.pathname = pathname;
+  const endpointUrl = new URL(environmentEndpointUrl(url.href, pathname));
   if (searchParams) {
-    url.search = new URLSearchParams(searchParams).toString();
+    endpointUrl.search = new URLSearchParams(searchParams).toString();
   }
-  return url.toString();
+  return endpointUrl.toString();
 }
 
 // Null only when the desktop app runs with its local environment disabled;

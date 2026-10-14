@@ -35,9 +35,24 @@ import {
   createProjectFaviconUrlAtomFamily,
   InvalidAssetCollectionKeyError,
   parseAssetCollectionKey,
+  resolveAssetUrl,
 } from "./assets.ts";
 
 describe("asset collection keys", () => {
+  it("resolves server-relative signed assets inside the environment mount", () => {
+    expect(
+      resolveAssetUrl(
+        "https://proxy.test/ws/a%2Fb?token=secret#secret",
+        "/api/assets/image?signature=signed",
+      ),
+    ).toBe("https://proxy.test/ws/a%2Fb/api/assets/image?signature=signed");
+    expect(
+      resolveAssetUrl(
+        "https://proxy.test/one",
+        "https://local.test/two/api/assets/image?signature=signed",
+      ),
+    ).toBe("https://local.test/two/api/assets/image?signature=signed");
+  });
   it("preserves malformed JSON and its native cause", () => {
     const key = "not-json";
     let error: unknown;

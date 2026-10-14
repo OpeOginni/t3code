@@ -1,4 +1,5 @@
-import { readHostedPairingRequest } from "@t3tools/shared/remote";
+import { readHostedPairingRequest, resolveRemotePairingTarget } from "@t3tools/shared/remote";
+import { environmentEndpointUrl, normalizeHttpBaseUrl } from "@t3tools/shared/advertisedEndpoint";
 import * as Schema from "effect/Schema";
 
 const MOBILE_PAIRING_URL_PARAM = "pairingUrl";
@@ -34,7 +35,9 @@ export function buildPairingUrl(host: string, code: string): string {
   if (!c) return h;
 
   try {
-    const url = new URL(h.includes("://") ? h : `${isIpLiteral(h) ? "http" : "https"}://${h}`);
+    const base = new URL(h.includes("://") ? h : `${isIpLiteral(h) ? "http" : "https"}://${h}`);
+    // An explicit pairing route disambiguates a mount whose own last segment is "pair".
+    const url = new URL(environmentEndpointUrl(base.href, base.pathname === "/" ? "/" : "/pair"));
     url.hash = new URLSearchParams([["token", c]]).toString();
     return url.toString();
   } catch {
@@ -61,10 +64,10 @@ export function parsePairingUrl(url: string): { host: string; code: string } {
     const queryToken = parsed.searchParams.get("token");
     const code = hashToken || queryToken || "";
 
-    parsed.hash = "";
-    parsed.search = "";
-    parsed.pathname = "/";
-    return { host: parsed.toString().replace(/\/$/, ""), code };
+    const httpBaseUrl = code
+      ? resolveRemotePairingTarget({ pairingUrl: trimmed }).httpBaseUrl
+      : normalizeHttpBaseUrl(parsed.href);
+    return { host: httpBaseUrl.replace(/\/$/, ""), code };
   } catch {
     return { host: trimmed, code: "" };
   }

@@ -9,6 +9,7 @@ import * as Result from "effect/Result";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as HttpEffect from "effect/http/HttpEffect";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import { environmentEndpointUrl } from "@t3tools/shared/advertisedEndpoint";
 
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import * as McpOAuth from "./McpOAuth.ts";
@@ -96,7 +97,12 @@ export const layer = HttpApiBuilder.group(
               .pipe(Effect.result);
             const headers = { "cache-control": "no-store", "referrer-policy": "no-referrer" };
             if (Result.isSuccess(authorization)) {
-              return HttpServerResponse.redirect(`${APPROVAL_PAGE_PATH}${url.search}`, { headers });
+              const redirect = new URL(
+                environmentEndpointUrl(urls.issuer, `${APPROVAL_PAGE_PATH}${url.search}`),
+              );
+              return HttpServerResponse.redirect(`${redirect.pathname}${redirect.search}`, {
+                headers,
+              });
             }
             const error = authorization.failure;
             return error._tag === "McpOAuthPageError"

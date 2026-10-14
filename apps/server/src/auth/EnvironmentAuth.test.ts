@@ -527,29 +527,35 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
     }).pipe(Effect.provide(layerEnvironmentAuth())),
   );
 
-  it.effect("issues startup pairing URLs that bootstrap administrative sessions", () =>
-    Effect.gen(function* () {
-      const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-      const sessions = yield* SessionStore.SessionStore;
+  it.effect.each(["http://127.0.0.1:3773", "http://127.0.0.1:3773/ws/a%2Fb/?token=old#fragment"])(
+    "issues startup pairing URLs that bootstrap administrative sessions at %s",
+    (baseUrl) =>
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const sessions = yield* SessionStore.SessionStore;
 
-      const pairingUrl = yield* serverAuth.issueStartupPairingUrl("http://127.0.0.1:3773");
-      const token = new URLSearchParams(new URL(pairingUrl).hash.slice(1)).get("token");
-      const listedPairingLinks = yield* serverAuth.listPairingLinks();
-      expect(token).toBeTruthy();
-      expect(
-        listedPairingLinks.some(
-          (pairingLink) => pairingLink.subject === "administrative-bootstrap",
-        ),
-      ).toBe(false);
+        const pairingUrl = yield* serverAuth.issueStartupPairingUrl(baseUrl);
+        expect(new URL(pairingUrl).pathname).toBe(
+          baseUrl.includes("/ws/") ? "/ws/a%2Fb/pair" : "/pair",
+        );
+        expect(new URL(pairingUrl).search).toBe("");
+        const token = new URLSearchParams(new URL(pairingUrl).hash.slice(1)).get("token");
+        const listedPairingLinks = yield* serverAuth.listPairingLinks();
+        expect(token).toBeTruthy();
+        expect(
+          listedPairingLinks.some(
+            (pairingLink) => pairingLink.subject === "administrative-bootstrap",
+          ),
+        ).toBe(false);
 
-      const exchanged = yield* serverAuth.createBrowserSession(token ?? "", requestMetadata);
-      const verified = yield* serverAuth.authenticateHttpRequest(
-        makeCookieRequest(sessions.cookieName, exchanged.sessionToken),
-      );
+        const exchanged = yield* serverAuth.createBrowserSession(token ?? "", requestMetadata);
+        const verified = yield* serverAuth.authenticateHttpRequest(
+          makeCookieRequest(sessions.cookieName, exchanged.sessionToken),
+        );
 
-      expect(verified.scopes).toEqual(AuthAdministrativeScopes);
-      expect(verified.subject).toBe("administrative-bootstrap");
-    }).pipe(Effect.provide(layerEnvironmentAuth())),
+        expect(verified.scopes).toEqual(AuthAdministrativeScopes);
+        expect(verified.subject).toBe("administrative-bootstrap");
+      }).pipe(Effect.provide(layerEnvironmentAuth())),
   );
 
   it.effect(

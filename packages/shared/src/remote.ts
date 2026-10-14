@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { deriveWsBaseUrl, normalizeHttpBaseUrl } from "./advertisedEndpoint.ts";
 
 const PAIRING_TOKEN_PARAM = "token";
 const HOSTED_PAIRING_HOST_PARAM = "host";
@@ -97,36 +98,17 @@ const normalizeRemoteBaseUrl = (
       protocol: url.protocol,
     });
   }
-  url.pathname = "/";
   url.search = "";
   url.hash = "";
   return url;
 };
 
 const toHttpBaseUrl = (url: URL): string => {
-  const next = new URL(url.toString());
-  if (next.protocol === "ws:") {
-    next.protocol = "http:";
-  } else if (next.protocol === "wss:") {
-    next.protocol = "https:";
-  }
-  next.pathname = "/";
-  next.search = "";
-  next.hash = "";
-  return next.toString();
+  return normalizeHttpBaseUrl(url.toString());
 };
 
 const toWsBaseUrl = (url: URL): string => {
-  const next = new URL(url.toString());
-  if (next.protocol === "http:") {
-    next.protocol = "ws:";
-  } else if (next.protocol === "https:") {
-    next.protocol = "wss:";
-  }
-  next.pathname = "/";
-  next.search = "";
-  next.hash = "";
-  return next.toString();
+  return deriveWsBaseUrl(url.toString());
 };
 
 export interface ResolvedRemotePairingTarget {
@@ -220,6 +202,8 @@ export const resolveRemotePairingTarget = (input: {
     if (!credential) {
       throw new RemotePairingTokenMissingError({ host: url.host });
     }
+    // Direct links point at the app's pairing route, not the server base.
+    url.pathname = url.pathname.replace(/\/pair\/*$/, "/");
     return {
       credential,
       httpBaseUrl: toHttpBaseUrl(url),

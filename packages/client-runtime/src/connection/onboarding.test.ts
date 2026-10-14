@@ -226,6 +226,34 @@ const registerSwitchedOffEnvironment = Effect.gen(function* () {
 });
 
 describe("connection onboarding", () => {
+  it.effect("persists separate prefixed routes for the same environment and origin", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+      const registrations = [];
+      for (const prefix of ["/ws/one", "/ws/two/"]) {
+        const registration = yield* preparePairingRegistration({
+          pairingUrl: `https://app.t3.codes/pair?host=${encodeURIComponent(`https://proxy.test${prefix}`)}#token=pairing-token`,
+        }).pipe(Effect.provide(Layer.mergeAll(layerClientPresentation, layerPairingHttp(calls))));
+        registrations.push(registration);
+        expect(registration.profile.httpBaseUrl).toBe(
+          `https://proxy.test${prefix.replace(/\/$/, "")}/`,
+        );
+      }
+      expect(
+        new Set(registrations.map((registration) => registration.target.connectionId)).size,
+      ).toBe(2);
+      expect(calls.map((call) => call.url)).toEqual([
+        "https://proxy.test/ws/one/.well-known/t3/environment",
+        "https://proxy.test/ws/one/oauth/token",
+        "https://proxy.test/ws/two/.well-known/t3/environment",
+        "https://proxy.test/ws/two/oauth/token",
+      ]);
+      for (const { url, init } of calls) {
+        expect(url).not.toContain("pairing-token");
+        expect(init.redirect).toBe("error");
+      }
+    }),
+  );
   it.effect("prepares a persisted bearer registration from pairing details", () =>
     Effect.gen(function* () {
       const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
@@ -589,8 +617,8 @@ describe("connection onboarding", () => {
         profile: {
           environmentId,
           label: "Renamed environment",
-          httpBaseUrl: "http://100.65.180.100:3773/",
-          wsBaseUrl: "ws://100.65.180.100:3773/",
+          httpBaseUrl: "http://100.65.180.100:3773/path/",
+          wsBaseUrl: "ws://100.65.180.100:3773/path/",
         },
         credential: { token: "bearer-token" },
       });

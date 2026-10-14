@@ -1045,11 +1045,12 @@ it.effect("admits provider and OAuth client credentials and points only clients 
         Layer.build,
       );
       const httpClient = yield* HttpClient.HttpClient;
-      const call = (token: string | undefined) =>
+      const call = (token: string | undefined, prefix?: string) =>
         Effect.gen(function* () {
           const headers = {
             accept: "application/json, text/event-stream",
             ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+            ...(prefix === undefined ? {} : { "x-forwarded-prefix": prefix }),
           };
           const initialize = yield* httpClient.post("/mcp", {
             headers,
@@ -1083,6 +1084,11 @@ it.effect("admits provider and OAuth client credentials and points only clients 
       expect(missing.status).toBe(401);
       expect(missing.headers["www-authenticate"]).toMatch(
         /^Bearer resource_metadata="http:\/\/[^"]+\/\.well-known\/oauth-protected-resource\/mcp"$/,
+      );
+      const prefixed = yield* call(undefined, "/ws/a%2Fb");
+      expect(prefixed.status).toBe(401);
+      expect(prefixed.headers["www-authenticate"]).toMatch(
+        /^Bearer resource_metadata="http:\/\/[^"]+\/ws\/a%2Fb\/\.well-known\/oauth-protected-resource\/mcp"$/,
       );
 
       const expiredClient = yield* call("stale-payload.stale-signature");

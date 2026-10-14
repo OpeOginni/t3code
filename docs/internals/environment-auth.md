@@ -49,10 +49,12 @@ above its ceiling. Inside MCP the credential sets the limits and tool
 parameters only pick targets; see
 [threadAccess](../../apps/server/src/mcp/threadAccess.ts).
 
-Issuer and resource URLs come from the request's Host and
-`X-Forwarded-Proto`, so one server answers over loopback, Tailscale Serve and a
-T3 Connect tunnel. A proxy that rewrites Host or drops the protocol header
-breaks sign-in.
+Issuer and resource URLs come from the request's Host, `X-Forwarded-Proto`,
+and the stripped mount path in `X-Forwarded-Prefix`. A reverse proxy must preserve
+Host and overwrite these forwarding headers, not append client-supplied values.
+The prefix also scopes browser cookies and restores the external URI for DPoP
+verification; it does not change origin authorization. A proxy that drops this
+information breaks proof-bound sign-in.
 
 Bearer and DPoP clients obtain short-lived WebSocket tickets through authenticated
 HTTP so long-lived tokens stay out of socket URLs. Browser sessions can

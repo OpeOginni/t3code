@@ -1,4 +1,5 @@
 import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
+import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 
 import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
 
@@ -77,7 +78,8 @@ export function buildHostedPairingUrl(input: {
   readonly label?: string | null;
 }): string {
   const url = new URL("/pair", configuredHostedAppUrl());
-  url.searchParams.set("host", input.host);
+  const target = resolveRemotePairingTarget({ host: input.host, pairingCode: input.token });
+  url.searchParams.set("host", target.httpBaseUrl.replace(/\/$/, ""));
 
   const label = input.label?.trim();
   if (label) {

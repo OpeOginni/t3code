@@ -157,6 +157,20 @@ For a plain HTTP LAN endpoint, use the direct pairing URL in a browser that can
 open it, or pair from the desktop app. On mobile, an IP address entered without a
 scheme uses HTTP, so include `https://` when your server uses HTTPS.
 
+### Reverse proxies with a path prefix
+
+When adding an environment, use its full external base URL, including the mount
+path, for example `https://proxy.example/ws/my-workspace`. Keep that full URL in
+the `host` parameter of a hosted pairing link. Separate environments can use
+different paths on the same hostname; do not map their API endpoints at the root.
+
+The proxy must strip the mount path for HTTP requests and WebSocket upgrades,
+preserve `Host`, and overwrite `X-Forwarded-Proto` and `X-Forwarded-Prefix` with
+the external scheme and stripped path. The prefix is needed for browser cookie
+paths and proof-bound authentication. Pairing and API requests do not follow
+redirects, so use the final base URL. HTTPS and browser network restrictions
+still apply; a path prefix does not bypass them.
+
 ## Desktop-managed SSH
 
 In the desktop app, open **Settings → Connections → Add environment**, choose

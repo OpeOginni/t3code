@@ -123,6 +123,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           const devCookie = devCookies.find((cookie) => cookie.startsWith("t3_dev_session_"));
           expect(devCookie).toContain("HttpOnly");
           expect(devCookie).toContain(`=${DEV_TOKEN};`);
+          expect(devCookie).toContain("Path=/;");
           expect(devCookies).toContainEqual(
             expect.stringMatching(/^t3_session_[^=]*=;.*Max-Age=0/),
           );
@@ -147,7 +148,11 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(pairingResponse.status).toBe(200);
           const pairing = (await pairingResponse.json()) as { credential: string };
           const restrictedResponse = await environmentA.handler(
-            postJson("/api/auth/browser-session", { credential: pairing.credential }),
+            postJson(
+              "/api/auth/browser-session",
+              { credential: pairing.credential },
+              { "x-forwarded-prefix": "/ws/example-workspace" },
+            ),
             requestContext,
           );
           expect(restrictedResponse.status).toBe(200);
@@ -155,6 +160,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(restrictedCookies).toHaveLength(1);
           expect(restrictedCookies[0]).toMatch(/^t3_session_/);
           expect(restrictedCookies[0]).not.toContain("t3_dev_session_");
+          expect(restrictedCookies[0]).toContain("Path=/ws/example-workspace/;");
         }),
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),

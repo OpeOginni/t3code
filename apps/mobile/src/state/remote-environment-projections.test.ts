@@ -129,6 +129,24 @@ describe("remote environment projections", () => {
     });
   });
 
+  it("keeps the active mount in projected websocket bases without its ticket", () => {
+    const harness = makeHarness();
+    harness.registry.set(
+      harness.preparedConnectionAtom(ENVIRONMENT_ID),
+      Option.some({
+        ...prepared(ENVIRONMENT_ID, "proxy", "bearer-token"),
+        httpBaseUrl: "https://proxy.test/ws/a%2Fb/",
+        socketUrl: "wss://ws.proxy.test/ws/a%2Fb/ws?wsTicket=secret",
+      }),
+    );
+    expect(
+      harness.registry.get(harness.projections.savedConnectionAtom(ENVIRONMENT_ID)),
+    ).toMatchObject({
+      httpBaseUrl: "https://proxy.test/ws/a%2Fb/",
+      wsBaseUrl: "wss://ws.proxy.test/ws/a%2Fb/",
+    });
+  });
+
   it("preserves saved identity across config-only updates and refreshes runtime state", () => {
     const harness = makeHarness();
     const savedAtom = harness.projections.savedConnectionAtom(ENVIRONMENT_ID);

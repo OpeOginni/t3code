@@ -25,7 +25,6 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Cookies from "effect/http/Cookies";
 import * as HttpEffect from "effect/http/HttpEffect";
@@ -37,6 +36,7 @@ import * as SessionStore from "./SessionStore.ts";
 import { traceAuthenticatedRelayRequest, traceRelayRequest } from "../cloud/traceRelayRequest.ts";
 import { deriveAuthClientMetadata } from "./utils.ts";
 import { verifyRequestDpopProof } from "./dpop.ts";
+import { requestPathPrefix } from "./requestUrl.ts";
 
 const CREDENTIAL_RESPONSE_HEADERS = {
   "cache-control": "no-store",
@@ -199,14 +199,30 @@ export function failEnvironmentInternal(reason: EnvironmentInternalErrorReason, 
   });
 }
 
+const sessionCookiePath = Effect.gen(function* () {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const traceId = yield* currentEnvironmentTraceId;
+  return yield* Effect.try({
+    try: () => `${requestPathPrefix(request)}/`,
+    catch: () =>
+      new EnvironmentInternalError({
+        code: "internal_error",
+        reason: "browser_session_cookie_failed",
+        traceId,
+      }),
+  });
+});
+
 const appendSessionCookie = (cookieName: string, token: string, expiresAt: DateTime.DateTime) =>
-  Effect.fromResult(
-    Cookies.set(Cookies.empty, cookieName, token, {
-      expires: DateTime.toDate(expiresAt),
-      httpOnly: true,
-      path: "/",
-      sameSite: "lax",
-    }),
+  Effect.flatMap(sessionCookiePath, (path) =>
+    Effect.fromResult(
+      Cookies.set(Cookies.empty, cookieName, token, {
+        expires: DateTime.toDate(expiresAt),
+        httpOnly: true,
+        path,
+        sameSite: "lax",
+      }),
+    ),
   ).pipe(
     Effect.catch(() => failEnvironmentInternal("browser_session_cookie_failed")),
     Effect.flatMap((cookies) =>
@@ -301,6 +317,7 @@ export const layer = HttpApiBuilder.group(
           function* (args) {
             yield* annotateEnvironmentRequest(args.endpoint.name);
             const request = yield* HttpServerRequest.HttpServerRequest;
+            const path = yield* sessionCookiePath;
             const previousCredential = EnvironmentAuth.selectRequestCredential(
               request,
               sessions.cookieName,
@@ -319,7 +336,7 @@ export const layer = HttpApiBuilder.group(
               Cookies.set(Cookies.empty, cookieName, result.sessionToken, {
                 expires: DateTime.toDate(result.response.expiresAt),
                 httpOnly: true,
-                path: "/",
+                path,
                 sameSite: "lax",
               }),
             ).pipe(Effect.catch(() => failEnvironmentInternal("browser_session_cookie_failed")));
@@ -327,7 +344,7 @@ export const layer = HttpApiBuilder.group(
               ? yield* Effect.fromResult(
                   Cookies.expireCookie(selectedCookie, sessions.cookieName, {
                     httpOnly: true,
-                    path: "/",
+                    path,
                     sameSite: "lax",
                   }),
                 ).pipe(Effect.catch(() => failEnvironmentInternal("browser_session_cookie_failed")))

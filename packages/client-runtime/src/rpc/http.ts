@@ -9,6 +9,7 @@ import {
   type EnvironmentScopeRequiredError,
 } from "@t3tools/contracts";
 import * as HttpObservability from "@t3tools/shared/httpObservability";
+import { normalizeHttpBaseUrl } from "@t3tools/shared/advertisedEndpoint";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -86,17 +87,22 @@ export const layerRemoteHttpClient = (
     HttpObservability.layer,
   );
 
-const remoteApiBaseUrl = (httpBaseUrl: string): string => {
-  const url = new URL(httpBaseUrl);
-  url.pathname = "/";
-  url.search = "";
-  url.hash = "";
-  return url.toString();
-};
+// Redirecting a pairing POST can forward its body to another environment or origin.
+// Apply this at the HTTP client boundary, including primary browser-session pairing.
+const withoutEnvironmentRedirects = <A, E, R>(request: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Effect.serviceOption(FetchHttpClient.RequestInit), (init) =>
+    request.pipe(
+      Effect.provideService(FetchHttpClient.RequestInit, {
+        ...Option.getOrElse(init, () => ({})),
+        redirect: "error",
+      }),
+    ),
+  );
 
 export const makeEnvironmentHttpApiClient = (httpBaseUrl: string) =>
   HttpApiClient.make(EnvironmentHttpApi, {
-    baseUrl: remoteApiBaseUrl(httpBaseUrl),
+    baseUrl: normalizeHttpBaseUrl(httpBaseUrl),
+    transformClient: (client) => HttpClient.transformResponse(client, withoutEnvironmentRedirects),
   });
 
 export const makeEnvironmentHttpApiGroupClient = <
@@ -107,16 +113,16 @@ export const makeEnvironmentHttpApiGroupClient = <
 ) =>
   Effect.flatMap(HttpClient.HttpClient, (httpClient) =>
     HttpApiClient.group(EnvironmentHttpApi, {
-      httpClient,
+      httpClient: HttpClient.transformResponse(httpClient, withoutEnvironmentRedirects),
       group,
-      baseUrl: remoteApiBaseUrl(httpBaseUrl),
+      baseUrl: normalizeHttpBaseUrl(httpBaseUrl),
     }),
   );
 
 /** Contract-derived request URLs for authentication proofs, tracing, and structured errors. */
 export const makeEnvironmentHttpApiUrlBuilder = (httpBaseUrl: string) =>
   HttpApiClient.urlBuilder(EnvironmentHttpApi, {
-    baseUrl: remoteApiBaseUrl(httpBaseUrl),
+    baseUrl: normalizeHttpBaseUrl(httpBaseUrl),
   });
 
 const failRemoteRequest = (

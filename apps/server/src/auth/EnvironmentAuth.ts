@@ -26,6 +26,7 @@ import {
   type DpopFailureReason as DpopFailureReasonType,
 } from "@t3tools/contracts";
 import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
+import { environmentEndpointUrl } from "@t3tools/shared/advertisedEndpoint";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -1221,9 +1222,7 @@ export const make = Effect.gen(function* () {
   const issueStartupPairingUrl: EnvironmentAuth["Service"]["issueStartupPairingUrl"] = (baseUrl) =>
     issueStartupPairingCredential().pipe(
       Effect.map((issued) => {
-        const url = new URL(baseUrl);
-        url.pathname = "/pair";
-        url.searchParams.delete("token");
+        const url = new URL(environmentEndpointUrl(baseUrl, "/pair"));
         url.hash = new URLSearchParams([["token", issued.credential]]).toString();
         return url.toString();
       }),

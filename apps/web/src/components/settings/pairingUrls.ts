@@ -1,9 +1,9 @@
 import { buildHostedPairingUrl } from "../../hostedPairing";
 import { setPairingTokenOnUrl } from "../../pairingUrl";
+import { environmentEndpointUrl } from "@t3tools/shared/advertisedEndpoint";
 
 export function resolveDesktopPairingUrl(endpointUrl: string, credential: string): string {
-  const url = new URL(endpointUrl);
-  url.pathname = "/pair";
+  const url = new URL(environmentEndpointUrl(endpointUrl, "/pair"));
   return setPairingTokenOnUrl(url, credential).toString();
 }
 

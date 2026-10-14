@@ -98,7 +98,7 @@ const resolvePairingTarget = Effect.fn("clientRuntime.connection.onboarding.reso
  * reuses the id and replaces that route.
  */
 function bearerConnectionId(environmentId: EnvironmentId, httpBaseUrl: string): string {
-  return `bearer:${environmentId}:${new URL(httpBaseUrl).origin}`;
+  return `bearer:${environmentId}:${normalizeHttpBaseUrl(httpBaseUrl).replace(/\/+$/, "")}`;
 }
 
 function differentMachineError(label: string) {

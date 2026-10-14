@@ -30,6 +30,7 @@ import * as McpHttpServer from "../mcp/McpHttpServer.ts";
 import type * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
+import { externalRequestUrl, requestPathPrefix } from "./requestUrl.ts";
 import {
   base64UrlDecodeUtf8,
   base64UrlEncode,
@@ -69,16 +70,16 @@ export interface McpOAuthUrls {
 }
 
 /**
- * Issuer and MCP resource for the origin this request reached: its Host, and
- * https when a proxy says so. A Host that is not a valid authority falls back
- * to localhost, which no client will have asked for.
+ * Issuer and MCP resource for this request's external server base, including a
+ * proxy's stripped mount. Invalid forwarding information falls back to localhost,
+ * which no client will have asked for.
  */
 export const requestUrls = (request: HttpServerRequest.HttpServerRequest): McpOAuthUrls => {
-  const origin = Option.match(HttpServerRequest.toURL(request), {
+  const issuer = Option.match(externalRequestUrl(request), {
     onNone: () => "http://localhost",
-    onSome: (url) => url.origin,
+    onSome: (url) => `${url.origin}${requestPathPrefix(request)}`,
   });
-  return { issuer: origin, resource: `${origin}/mcp` };
+  return { issuer, resource: `${issuer}/mcp` };
 };
 
 export const protectedResourceMetadata = (

@@ -9,6 +9,36 @@ import {
 } from "./remote.ts";
 
 describe("remote", () => {
+  it.each([
+    "/ws/example-workspace",
+    "/ws/example-workspace/",
+    "/nested/a%2Fb/c%20d",
+    "/ws",
+    "/nested/ws",
+  ])("preserves the base path for all pairing entry points: %s", (prefix) => {
+    const base = `http://localhost:8888${prefix}`;
+    const expected = {
+      credential: "pairing-token",
+      httpBaseUrl: `${base.replace(/\/$/, "")}/`,
+      wsBaseUrl: `${base.replace(/^http:/, "ws:").replace(/\/$/, "")}/`,
+    };
+    expect(
+      resolveRemotePairingTarget({
+        host: `${base}?ignored=yes#token=secret`,
+        pairingCode: "pairing-token",
+      }),
+    ).toEqual(expected);
+    expect(
+      resolveRemotePairingTarget({
+        pairingUrl: `${base.replace(/\/$/, "")}/pair?ignored=yes#token=pairing-token`,
+      }),
+    ).toEqual(expected);
+    expect(
+      resolveRemotePairingTarget({
+        pairingUrl: `https://app.t3.codes/pair?host=${encodeURIComponent(base)}#token=pairing-token`,
+      }),
+    ).toEqual(expected);
+  });
   it("derives backend urls and token from a pairing url", () => {
     expect(
       resolveRemotePairingTarget({

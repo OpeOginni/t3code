@@ -1,5 +1,6 @@
 import { SessionPermissions } from "./SessionPermissions";
 import { AUTH_SCOPE_OPTIONS as PAIRING_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
+import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 import {
   ChevronRightIcon,
   ChevronsLeftRightEllipsisIcon,
@@ -351,7 +352,7 @@ function parsePairingUrlFields(
     const pairingCode = getPairingTokenFromUrl(url);
     if (!pairingCode) return null;
     return {
-      host: url.origin,
+      host: resolveRemotePairingTarget({ pairingUrl: url.href }).httpBaseUrl,
       pairingCode,
     };
   } catch {

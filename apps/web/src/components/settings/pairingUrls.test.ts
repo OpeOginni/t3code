@@ -3,6 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
 
 describe("settings pairing URL helpers", () => {
+  it("keeps nested prefixes in direct and hosted links", () => {
+    vi.stubEnv("VITE_HOSTED_APP_URL", "https://app.t3.codes");
+    expect(
+      resolveDesktopPairingUrl("https://proxy.test/ws/a%2Fb/?ignored=yes#secret", "PAIRCODE"),
+    ).toBe("https://proxy.test/ws/a%2Fb/pair#token=PAIRCODE");
+    expect(resolveHostedPairingUrl("https://proxy.test/ws/a%2Fb/", "PAIRCODE")).toBe(
+      "https://app.t3.codes/pair?host=https%3A%2F%2Fproxy.test%2Fws%2Fa%252Fb#token=PAIRCODE",
+    );
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
   });

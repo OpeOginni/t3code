@@ -21,8 +21,42 @@ export interface CreateAdvertisedEndpointInput {
   readonly description?: string;
 }
 
-export function normalizeHttpBaseUrl(rawValue: string): string {
+/** Base URLs name a directory, not an origin or an individual endpoint. */
+function normalizeServerBaseUrl(rawValue: string): string {
   const url = new URL(rawValue);
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+  url.username = "";
+  url.password = "";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+/** Resolve a server-relative route inside its mount, without carrying base URL secrets. */
+export function environmentEndpointUrl(baseUrl: string, pathname: string): string {
+  const base = new URL(normalizeServerBaseUrl(baseUrl));
+  const url = new URL(pathname.replace(/^\/+/, ""), base);
+  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+    throw new Error("Environment endpoint must stay within its server base URL.");
+  }
+  return url.toString();
+}
+
+export function environmentWebSocketUrl(wsBaseUrl: string): string {
+  // Older configured endpoints use /ws without the directory slash.
+  const url = new URL(wsBaseUrl);
+  if (url.pathname.endsWith("/ws")) {
+    url.search = "";
+    url.hash = "";
+    url.username = "";
+    url.password = "";
+    return url.toString();
+  }
+  return environmentEndpointUrl(wsBaseUrl, "/ws");
+}
+
+export function normalizeHttpBaseUrl(rawValue: string): string {
+  const url = new URL(normalizeServerBaseUrl(rawValue));
   if (url.protocol === "ws:") {
     url.protocol = "http:";
   } else if (url.protocol === "wss:") {
@@ -33,9 +67,6 @@ export function normalizeHttpBaseUrl(rawValue: string): string {
     throw new Error(`Endpoint must use HTTP or HTTPS. Received ${url.protocol}`);
   }
 
-  url.pathname = "/";
-  url.search = "";
-  url.hash = "";
   return url.toString();
 }
 

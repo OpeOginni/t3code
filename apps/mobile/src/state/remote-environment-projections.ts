@@ -6,9 +6,26 @@ import { connectionCatalogDisplayUrl } from "@t3tools/client-runtime/connection"
 import type { EnvironmentId, ServerConfig } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
+import { deriveWsBaseUrl } from "@t3tools/shared/advertisedEndpoint";
 
 import type { SavedRemoteConnection } from "../lib/connection";
 import type { EnvironmentRuntimeState } from "./remote-runtime-types";
+
+function projectedWsBaseUrl(httpBaseUrl: string, socketUrl: string | undefined) {
+  try {
+    const url = new URL(socketUrl || deriveWsBaseUrl(httpBaseUrl));
+    if (socketUrl) url.pathname = url.pathname.replace(/\/ws$/, "/");
+    url.search = "";
+    url.hash = "";
+    url.username = "";
+    url.password = "";
+    // Root projections historically omit the slash; mounts must remain directories.
+    return url.pathname === "/" ? url.origin : url.toString();
+  } catch {
+    // An unavailable SSH route displays user@host, not an HTTP base URL.
+    return httpBaseUrl.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+  }
+}
 
 export function createRemoteEnvironmentProjectionAtoms(input: {
   readonly presentationAtom: (
@@ -44,13 +61,7 @@ export function createRemoteEnvironmentProjectionAtoms(input: {
 
       const displayUrl = connectionCatalogDisplayUrl(presentation.entry) ?? "";
       const httpBaseUrl = prepared?.httpBaseUrl ?? displayUrl;
-      const socketUrl = prepared?.socketUrl ?? "";
-      const wsBaseUrl =
-        socketUrl === ""
-          ? displayUrl.startsWith("https://")
-            ? displayUrl.replace(/^https:/, "wss:")
-            : displayUrl.replace(/^http:/, "ws:")
-          : new URL(socketUrl).origin;
+      const wsBaseUrl = projectedWsBaseUrl(httpBaseUrl, prepared?.socketUrl);
       const authorization = prepared?.httpAuthorization ?? null;
       // Credentials follow the route in use, which may not be the preferred one.
       const relayManaged = prepared

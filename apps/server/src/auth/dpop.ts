@@ -8,7 +8,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Option from "effect/Option";
-import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 
 import {
   ServerAuthDpopReplayKeyCalculationError,
@@ -17,6 +17,7 @@ import {
   type ServerAuthInternalError,
 } from "./EnvironmentAuth.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
+import { externalRequestUrl } from "./requestUrl.ts";
 
 /** Secret store name prefix of DPoP replay markers. The server prunes expired ones. */
 export const DPOP_REPLAY_MARKER_PREFIX = "dpop-proof-";
@@ -60,7 +61,7 @@ export const verifyRequestDpopProof = (input: {
 }) =>
   Effect.gen(function* () {
     const proof = input.request.headers.dpop;
-    const url = HttpServerRequest.toURL(input.request);
+    const url = externalRequestUrl(input.request);
     if (Option.isNone(url)) {
       return yield* new ServerAuthInvalidCredentialError({
         diagnostic: "Invalid DPoP request URL.",
